@@ -1,17 +1,110 @@
 // components/DonationSection.tsx
-'use html'
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+
+type PaymentStatus = 'idle' | 'processing' | 'success' | 'error';
 
 export default function DonationSection() {
   const [selectedAmount, setSelectedAmount] = useState<number>(1000);
   const [customAmount, setCustomAmount] = useState<string>('');
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('idle');
+  const [statusMessage, setStatusMessage] = useState('');
 
   const handleTierSelect = (val: number) => {
     setSelectedAmount(val);
     setCustomAmount('');
   };
+
+  const effectiveAmount = customAmount ? Number(customAmount) : selectedAmount;
+
+  const handleDonate = useCallback(async () => {
+    if (effectiveAmount < 1) {
+      setPaymentStatus('error');
+      setStatusMessage('Minimum donation is ₹1.');
+      return;
+    }
+
+    setPaymentStatus('processing');
+    setStatusMessage('');
+
+    try {
+      // Create order
+      const orderRes = await fetch('/api/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: effectiveAmount }),
+      });
+
+      if (!orderRes.ok) {
+        const errData = await orderRes.json();
+        throw new Error(errData.error || 'Failed to create order.');
+      }
+
+      const { orderId, amount, currency } = await orderRes.json();
+
+      // Open Razorpay modal
+      const options: RazorpayOptions = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
+        amount,
+        currency,
+        name: 'Self Belief Foundation',
+        description: `Donation of ₹${effectiveAmount.toLocaleString()}`,
+        order_id: orderId,
+        handler: async (response: RazorpayPaymentResponse) => {
+          try {
+            const verifyRes = await fetch('/api/verify-payment', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            });
+
+            const verifyData = await verifyRes.json();
+
+            if (verifyData.verified) {
+              setPaymentStatus('success');
+              setStatusMessage(
+                `Thank you! Your donation of ₹${effectiveAmount.toLocaleString()} was successful. Payment ID: ${response.razorpay_payment_id}`
+              );
+            } else {
+              setPaymentStatus('error');
+              setStatusMessage('Payment verification failed. Please contact support.');
+            }
+          } catch {
+            setPaymentStatus('error');
+            setStatusMessage('Could not verify payment. Please contact support.');
+          }
+        },
+        theme: {
+          color: '#ae0011',
+        },
+        modal: {
+          ondismiss: () => {
+            setPaymentStatus('idle');
+          },
+          confirm_close: true,
+        },
+      };
+
+      const razorpay = new window.Razorpay(options);
+
+      razorpay.on('payment.failed', (response: RazorpayError) => {
+        setPaymentStatus('error');
+        setStatusMessage(response.description || 'Payment failed. Please try again.');
+      });
+
+      razorpay.open();
+    } catch (error: unknown) {
+      setPaymentStatus('error');
+      setStatusMessage(
+        error instanceof Error ? error.message : 'Something went wrong. Please try again.'
+      );
+    }
+  }, [effectiveAmount]);
 
   return (
     <section className="py-16 bg-white">
@@ -80,9 +173,37 @@ export default function DonationSection() {
               </div>
             </div>
 
-            <button className="w-full bg-[#ae0011] text-white text-lg font-bold py-4 rounded-2xl shadow-lg hover:bg-[#d71920] transition-all flex items-center justify-center gap-3">
-              Donate Now ₹{customAmount || selectedAmount}
+            <button
+              onClick={handleDonate}
+              disabled={paymentStatus === 'processing'}
+              className="w-full bg-[#ae0011] text-white text-lg font-bold py-4 rounded-2xl shadow-lg hover:bg-[#d71920] transition-all flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {paymentStatus === 'processing' ? (
+                <>
+                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Processing...
+                </>
+              ) : (
+                `Donate Now ₹${effectiveAmount.toLocaleString()}`
+              )}
             </button>
+
+            {/* Status feedback */}
+            {statusMessage && (
+              <div className={`mt-4 rounded-xl p-4 text-sm ${
+                paymentStatus === 'success'
+                  ? 'bg-green-50 border border-green-200 text-green-700'
+                  : 'bg-red-50 border border-red-200 text-red-700'
+              }`}>
+                {paymentStatus === 'success' && (
+                  <span className="inline-block mr-2">✅</span>
+                )}
+                {statusMessage}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -1,5 +1,6 @@
 // app/layout.tsx
 import { Poppins, Inter } from 'next/font/google';
+import Script from 'next/script';
 import './globals.css';
 
 const poppins = Poppins({
@@ -21,7 +22,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${poppins.variable} ${inter.variable} scroll-smooth`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Script
+          src="https://checkout.razorpay.com/v1/checkout.js"
+          strategy="lazyOnload"
+        />
+      </body>
     </html>
   );
 }

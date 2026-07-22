@@ -1,0 +1,28 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Donation {
+  id                String   @id @default(cuid())
+  name              String
+  email             String
+  phone             String   @default("")
+  amount            Int      // stored in paise
+  currency          String   @default("INR")
+  razorpayOrderId   String   @unique @map("razorpay_order_id")
+  razorpayPaymentId String?  @unique @map("razorpay_payment_id")
+  razorpaySignature String?  @map("razorpay_signature")
+  status            String   @default("created") // created | paid | failed
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("donations")
+}

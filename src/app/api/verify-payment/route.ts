@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,14 +39,28 @@ export async function POST(request: NextRequest) {
       );
 
     if (isValid) {
-      // Payment is verified — if you add a database later,
-      // persist the payment record here.
+      // Update donation record in database
+      await prisma.donation.update({
+        where: { razorpayOrderId: razorpay_order_id },
+        data: {
+          razorpayPaymentId: razorpay_payment_id,
+          razorpaySignature: razorpay_signature,
+          status: 'paid',
+        },
+      });
+
       return NextResponse.json({
         verified: true,
         orderId: razorpay_order_id,
         paymentId: razorpay_payment_id,
       });
     } else {
+      // Mark as failed in database
+      await prisma.donation.update({
+        where: { razorpayOrderId: razorpay_order_id },
+        data: { status: 'failed' },
+      });
+
       return NextResponse.json(
         { error: 'Payment signature verification failed.', verified: false },
         { status: 400 }

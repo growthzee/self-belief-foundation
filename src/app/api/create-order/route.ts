@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Razorpay from 'razorpay';
+import { prisma } from '@/lib/prisma';
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID!,
@@ -9,7 +10,7 @@ const razorpay = new Razorpay({
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { amount } = body;
+    const { amount, name, email, phone } = body;
 
     // Validate amount (minimum ₹1 = 100 paise)
     if (!amount || typeof amount !== 'number' || amount < 1) {
@@ -27,6 +28,19 @@ export async function POST(request: NextRequest) {
       receipt: `receipt_${Date.now()}`,
       notes: {
         source: 'self-belief-foundation',
+      },
+    });
+
+    // Persist donation record in database
+    await prisma.donation.create({
+      data: {
+        name: name || 'Anonymous',
+        email: email || '',
+        phone: phone || '',
+        amount: amountInPaise,
+        currency: 'INR',
+        razorpayOrderId: order.id,
+        status: 'created',
       },
     });
 

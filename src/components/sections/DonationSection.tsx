@@ -1,11 +1,12 @@
-// components/DonationSection.tsx
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 
 type PaymentStatus = 'idle' | 'processing' | 'success' | 'error';
 
 export default function DonationSection() {
+  const router = useRouter();
   const [selectedAmount, setSelectedAmount] = useState<number>(1000);
   const [customAmount, setCustomAmount] = useState<string>('');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('idle');
@@ -66,17 +67,12 @@ export default function DonationSection() {
             const verifyData = await verifyRes.json();
 
             if (verifyData.verified) {
-              setPaymentStatus('success');
-              setStatusMessage(
-                `Thank you! Your donation of ₹${effectiveAmount.toLocaleString()} was successful. Payment ID: ${response.razorpay_payment_id}`
-              );
+              router.push(`/donate/success?payment_id=${response.razorpay_payment_id}&order_id=${response.razorpay_order_id}`);
             } else {
-              setPaymentStatus('error');
-              setStatusMessage('Payment verification failed. Please contact support.');
+              router.push(`/donate/failed?reason=${encodeURIComponent('Signature verification failed')}&order_id=${response.razorpay_order_id}`);
             }
           } catch {
-            setPaymentStatus('error');
-            setStatusMessage('Could not verify payment. Please contact support.');
+            router.push(`/donate/failed?reason=${encodeURIComponent('Could not verify payment with server.')}&order_id=${response.razorpay_order_id}`);
           }
         },
         theme: {
@@ -93,8 +89,8 @@ export default function DonationSection() {
       const razorpay = new window.Razorpay(options);
 
       razorpay.on('payment.failed', (response: RazorpayError) => {
-        setPaymentStatus('error');
-        setStatusMessage(response.description || 'Payment failed. Please try again.');
+        const failReason = response.description || 'Payment failed or was cancelled.';
+        router.push(`/donate/failed?reason=${encodeURIComponent(failReason)}&order_id=${orderId}`);
       });
 
       razorpay.open();
@@ -104,7 +100,7 @@ export default function DonationSection() {
         error instanceof Error ? error.message : 'Something went wrong. Please try again.'
       );
     }
-  }, [effectiveAmount]);
+  }, [effectiveAmount, router]);
 
   return (
     <section className="py-16 bg-white">
